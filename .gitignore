@@ -1,3 +1,16 @@
+#
+# .gitignore
+#
+
+## BACKUP FILES ##
+
+*~
+*.bak
+*.autosave
+
+
+## BUILD ARTIFACTS ##
+
 Makefile
 Makefile.in
 .deps
@@ -23,16 +36,35 @@ ltmain.sh
 install-sh
 stamp-h1
 libtool
-Doxyfile
 
 .tarball-version
 .version
 
 .*.swp
 
-doc/
+
+## Generated Documentation ##
+
+doc/doxygen/docbook/
+doc/doxygen/html/
+doc/doxygen/man/
+doc/doxygen/latex/
+doc/doxygen/rtf/
+doc/doxygen/xml/
+doc/doxygen/doxygen.log
+doc/doxygen/doxytags.xml
+
+
+## CMake-related Files ##
 
 CMakeCache.txt
+CMakeLists.txt.user
 */CMakeFiles
 CMakeFiles
 *.cmake
+
+
+## CMake Build Directories ##
+
+build-*/
+/build-*/
