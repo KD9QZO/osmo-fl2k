@@ -36,7 +36,7 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h> /* for TCP_NODELAY */
 #include <fcntl.h>
-#define sleep_ms(ms)	usleep(ms*1000)
+#define sleep_ms(ms)	usleep(ms * 1000)
 #else
 #include <windows.h>
 #include <winsock2.h>
@@ -52,11 +52,15 @@
 typedef int socklen_t;
 
 #else
+
 #define closesocket close
 #define SOCKADDR struct sockaddr
 #define SOCKET int
 #define SOCKET_ERROR -1
+
 #endif
+
+
 
 static SOCKET s;
 static fl2k_dev_t *dev = NULL;
@@ -66,42 +70,42 @@ static char *txbuf = NULL;
 static fd_set readfds;
 static SOCKET sock;
 
-void usage(void)
-{
-	fprintf(stderr,
-		"fl2k_tcp, a spectrum client for FL2K VGA dongles\n\n"
-		"Usage:\t[-a server address]\n"
-		"\t[-d device index (default: 0)]\n"
-		"\t[-p port (default: 1234)]\n"
-		"\t[-s samplerate in Hz (default: 100 MS/s)]\n"
-		"\t[-b number of buffers (default: 4)]\n"
-	);
+
+
+void usage(void) {
+	fprintf(stderr, "fl2k_tcp, a spectrum client for FL2K VGA dongles\n\n"
+			"Usage:\t[-a server address]\n"
+			"\t[-d device index (default: 0)]\n"
+			"\t[-p port (default: 1234)]\n"
+			"\t[-s samplerate in Hz (default: 100 MS/s)]\n"
+			"\t[-b number of buffers (default: 4)]\n");
+
 	exit(1);
 }
 
 #ifdef _WIN32
-BOOL WINAPI
-sighandler(int signum)
-{
+BOOL WINAPI sighandler(int signum) {
 	if (CTRL_C_EVENT == signum) {
 		fprintf(stderr, "Signal caught, exiting!\n");
 		fl2k_stop_tx(dev);
 		do_exit = 1;
-		return TRUE;
+		return (TRUE);
 	}
-	return FALSE;
+
+	return (FALSE);
 }
-#else
-static void sighandler(int signum)
-{
+
+#else	/* _WIN32 */
+static void sighandler(int signum) {
 	fprintf(stderr, "Signal caught, exiting!\n");
 	do_exit = 1;
 	fl2k_stop_tx(dev);
 }
-#endif
 
-void fl2k_callback(fl2k_data_info_t *data_info)
-{
+#endif	/* !_WIN32 */
+
+
+void fl2k_callback(fl2k_data_info_t *data_info) {
 	int left = FL2K_BUF_LEN;
 	int received;
 	int r;
@@ -110,11 +114,13 @@ void fl2k_callback(fl2k_data_info_t *data_info)
 	if (data_info->device_error) {
 		fprintf(stderr, "Device error, exiting.\n");
 		do_exit = 1;
+
 		return;
 	}
 
-	if (!connected)
+	if (!connected) {
 		return;
+	}
 
 	data_info->sampletype_signed = 1;
 	data_info->r_buf = txbuf;
@@ -139,13 +145,16 @@ void fl2k_callback(fl2k_data_info_t *data_info)
 	}
 }
 
-int main(int argc, char **argv)
-{
-	int r, opt, i;
+
+int main(int argc, char *argv[]) {
+	int r;
+	int opt;
+	int i;
 	char *addr = "127.0.0.1";
 	int port = 1234;
 	uint32_t samp_rate = 100000000;
-	struct sockaddr_in local, remote;
+	struct sockaddr_in local;
+	struct sockaddr_in remote;
 	uint32_t buf_num = 0;
 	int dev_index = 0;
 	int dev_given = 0;
@@ -153,37 +162,44 @@ int main(int argc, char **argv)
 
 #ifdef _WIN32
 	WSADATA wsd;
-	i = WSAStartup(MAKEWORD(2,2), &wsd);
+	i = WSAStartup(MAKEWORD(2, 2), &wsd);
 #else
-	struct sigaction sigact, sigign;
+	struct sigaction sigact;
+	struct sigaction sigign;
 #endif
 
 	while ((opt = getopt(argc, argv, "d:s:a:p:b:")) != -1) {
 		switch (opt) {
-		case 'd':
-			dev_index = (uint32_t)atoi(optarg);
-			dev_given = 1;
-			break;
-		case 's':
-			samp_rate = (uint32_t)atof(optarg);
-			break;
-		case 'a':
-			addr = optarg;
-			break;
-		case 'p':
-			port = atoi(optarg);
-			break;
-		case 'b':
-			buf_num = atoi(optarg);
-			break;
-		default:
-			usage();
-			break;
+			case 'd':
+				dev_index = (uint32_t)atoi(optarg);
+				dev_given = 1;
+				break;
+
+			case 's':
+				samp_rate = (uint32_t)atof(optarg);
+				break;
+
+			case 'a':
+				addr = optarg;
+				break;
+
+			case 'p':
+				port = atoi(optarg);
+				break;
+
+			case 'b':
+				buf_num = atoi(optarg);
+				break;
+
+			default:
+				usage();
+				break;
 		}
 	}
 
-	if (argc < optind)
+	if (argc < optind) {
 		usage();
+	}
 
 	if (dev_index < 0) {
 		exit(1);
@@ -198,7 +214,7 @@ int main(int argc, char **argv)
 
 	fl2k_open(&dev, (uint32_t)dev_index);
 	if (NULL == dev) {
-		fprintf(stderr, "Failed to open fl2k device #%d.\n", dev_index);
+		fprintf(stderr, "Failed to open fl2k device #%d -- exiting now!\n", dev_index);
 		exit(1);
 	}
 
@@ -206,8 +222,9 @@ int main(int argc, char **argv)
 
 	/* Set the sample rate */
 	r = fl2k_set_sample_rate(dev, samp_rate);
-	if (r < 0)
+	if (r < 0) {
 		fprintf(stderr, "WARNING: Failed to set sample rate.\n");
+	}
 
 #ifndef _WIN32
 	sigact.sa_handler = sighandler;
@@ -219,7 +236,7 @@ int main(int argc, char **argv)
 	sigaction(SIGQUIT, &sigact, NULL);
 	sigaction(SIGPIPE, &sigact, NULL);
 #else
-	SetConsoleCtrlHandler( (PHANDLER_ROUTINE) sighandler, TRUE );
+	SetConsoleCtrlHandler((PHANDLER_ROUTINE)sighandler, TRUE);
 #endif
 
 	sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -231,18 +248,20 @@ int main(int argc, char **argv)
 	remote.sin_addr.s_addr = inet_addr(addr);
 
 	fprintf(stderr, "Connecting to %s:%d...\n", addr, port);
-	while (connect(sock, (struct sockaddr *)&remote, sizeof(remote)) != 0) {
+	while (connect(sock, (struct sockaddr*)&remote, sizeof(remote)) != 0) {
 		sleep_ms(500);
-		if (do_exit)
+		if (do_exit) {
 			goto out;
+		}
 	}
 
-	setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (char *)&flag,sizeof(flag));
-	fprintf(stderr, "Connected\n");
+	setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (char*)&flag, sizeof(flag));
+	fprintf(stderr, "Connected!\n");
 	connected = 1;
 
-	while (!do_exit)
+	while (!do_exit) {
 		sleep_ms(500);
+	}
 
 out:
 	fl2k_close(dev);
@@ -252,5 +271,5 @@ out:
 	WSACleanup();
 #endif
 
-	return 0;
+	return (0);
 }

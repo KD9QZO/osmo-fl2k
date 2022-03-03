@@ -2,7 +2,7 @@
  * RDS Modulator from:
  * PiFmRds - FM/RDS transmitter for the Raspberry Pi
  * https://github.com/ChristopheJacquet/PiFmRds
- * 
+ *
  * Copyright (C) 2014 by Christophe Jacquet, F8FTK
  *
  * adapted for use with fl2k_fm:
@@ -24,10 +24,13 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef RDS_H
-#define RDS_H
+#ifndef RDS_H_
+#define RDS_H_
 
-#define RDS_MODULATOR_RATE	(57000 * 4)
+
+#define RDS_MODULATOR_RATE (57000 * 4)
+
+
 
 void get_rds_samples(double *buffer, int count);
 void set_rds_pi(uint16_t pi_code);
@@ -35,4 +38,6 @@ void set_rds_rt(char *rt);
 void set_rds_ps(char *ps);
 void set_rds_ta(int ta);
 
-#endif /* RDS_H */
+
+
+#endif	/* !RDS_H_ */

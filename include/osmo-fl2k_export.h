@@ -20,32 +20,36 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef FL2K_EXPORT_H
-#define FL2K_EXPORT_H
+#ifndef FL2K_EXPORT_H_
+#define FL2K_EXPORT_H_
 
-#if defined __GNUC__
-#  if __GNUC__ >= 4
-#    define __FL2K_EXPORT   __attribute__((visibility("default")))
-#    define __FL2K_IMPORT   __attribute__((visibility("default")))
-#  else
-#    define __FL2K_EXPORT
-#    define __FL2K_IMPORT
-#  endif
-#elif _MSC_VER
-#  define __FL2K_EXPORT     __declspec(dllexport)
-#  define __FL2K_IMPORT     __declspec(dllimport)
+
+#if defined(__GNUC__)
+#if (__GNUC__ >= 4)
+#define __FL2K_EXPORT __attribute__((visibility("default")))
+#define __FL2K_IMPORT __attribute__((visibility("default")))
 #else
-#  define __FL2K_EXPORT
-#  define __FL2K_IMPORT
+#define __FL2K_EXPORT
+#define __FL2K_IMPORT
+#endif
+#elif (_MSC_VER)
+#define __FL2K_EXPORT __declspec(dllexport)
+#define __FL2K_IMPORT __declspec(dllimport)
+#else
+#define __FL2K_EXPORT
+#define __FL2K_IMPORT
 #endif
 
+
 #ifndef libosmofl2k_STATIC
-#	ifdef fl2k_EXPORTS
-#	define FL2K_API __FL2K_EXPORT
-#	else
-#	define FL2K_API __FL2K_IMPORT
-#	endif
+#ifdef fl2k_EXPORTS
+#define FL2K_API __FL2K_EXPORT
+#else
+#define FL2K_API __FL2K_IMPORT
+#endif
 #else
 #define FL2K_API
 #endif
-#endif /* FL2K_EXPORT_H */
+
+
+#endif	/* !FL2K_EXPORT_H_ */

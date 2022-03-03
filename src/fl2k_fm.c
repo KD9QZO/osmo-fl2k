@@ -46,11 +46,31 @@
 #include "osmo-fl2k.h"
 #include "rds_mod.h"
 
-#define BUFFER_SAMPLES_SHIFT	16
-#define BUFFER_SAMPLES		(1 << BUFFER_SAMPLES_SHIFT)
-#define BUFFER_SAMPLES_MASK	((1 << BUFFER_SAMPLES_SHIFT)-1)
 
-#define AUDIO_BUF_SIZE		1024
+
+#define BUFFER_SAMPLES_SHIFT	16
+#define BUFFER_SAMPLES			(1 << BUFFER_SAMPLES_SHIFT)
+#define BUFFER_SAMPLES_MASK		((1 << BUFFER_SAMPLES_SHIFT) - 1)
+
+#define AUDIO_BUF_SIZE			(1024)
+
+
+#if defined(_WIN32)
+
+const char tagError[] = "[ERROR] ";
+const char tagWarning[] = "[WARNING] ";
+const char tagInfo[] = "[INFO] ";
+const char tagDebug[] = "[DEBUG] ";
+
+#else
+
+const char tagError[] = "\033[31;1m[ERROR]\033[0m ";
+const char tagWarning[] = "\033[33;1m[WARNING]\033[0m ";
+const char tagInfo[] = "\033[32;1m[INFO]\033[0m ";
+const char tagDebug[] = "\033[36;1m[DEBUG]\033[0m ";
+
+#endif
+
 
 fl2k_dev_t *dev = NULL;
 int do_exit = 0;
@@ -69,9 +89,11 @@ int8_t *buf2 = NULL;
 
 uint32_t samp_rate = 100000000;
 
+
 /* default signal parameters */
-#define PILOT_FREQ	19000	/* In Hz */
-#define STEREO_CARRIER	38000	/* In Hz */
+#define PILOT_FREQ		(19000)	/* In Hz */
+#define STEREO_CARRIER	(38000)	/* In Hz */
+
 
 int delta_freq = 75000;
 int carrier_freq = 97000000;
@@ -79,67 +101,110 @@ int carrier_per_signal;
 int input_freq = 44100;
 int stereo_flag = 0;
 int rds_flag = 0;
+int help_flag = 0;
+uint16_t rds_pi = 0x0DAC;
+char rds_ps[8] = "fl2k_fm";
+char rds_rt[64] = "VGA FM transmitter";
 
-double *freqbuf; 
-double *slopebuf; 
-int writepos, readpos;
+double *freqbuf;
+double *slopebuf;
+int writepos;
+int readpos;
 
-void usage(void)
-{
-	fprintf(stderr,
-		"fl2k_fm, an FM modulator for FL2K VGA dongles\n\n"
-		"Usage:"
-		"\t[-d device index (default: 0)]\n"
-		"\t[-c carrier frequency (default: 9.7 MHz)]\n"
-		"\t[-f FM deviation (default: 75000 Hz, WBFM)]\n"
-		"\t[-i input audio sample rate (default: 44100 Hz for mono FM)]\n"
-		"\t[-s samplerate in Hz (default: 100 MS/s)]\n"
-		"\t[--rds (enables RDS, forces audio sample rate to 228 kHz)]\n"
-		"\t[--stereo (enables stereo, requires audio sample rate >= 114 kHz)]\n"
-		"\tfilename (use '-' to read from stdin)\n\n"
-	);
+
+static inline void usage(void);
+
+
+static inline void usage(void) {
+#if defined(_WIN32)
+	fprintf(stderr, "fl2k_fm, an FM modulator for FL2K VGA dongles\n\n"
+			"Usage:"
+			"\t[-d device index (default: 0)]\n"
+			"\t[-c carrier frequency (default: 9.7 MHz)]\n"
+			"\t[-f FM deviation (default: 75000 Hz, WBFM)]\n"
+			"\t[-i input audio sample rate (default: 44100 Hz for mono FM)]\n"
+			"\t[-s samplerate in Hz (default: 100 MS/s)]\n"
+			"\t[--rds (enables RDS, forces audio sample rate to 228 kHz)]\n"
+			"\t[--stereo (enables stereo, requires audio sample rate >= 114 kHz)]\n"
+			"\tfilename (use '-' to read from stdin)\n\n");
+#else
+	fprintf(stderr, "\033[1mfl2k_fm -- an FM modulator for FL2K VGA dongles\033[0m\n\n"
+			"\033[34;1mUSAGE:\033[0m\n\n"
+			"  $ \033[1m./fl2k_fm\033[0m [-d 0] [-c 9700000] [-f 75000] [-i 44100] [-s 100e6] [--rds] [--stereo] <filename>\n\n"
+			"\t\033[1m-d 0\033[0m\t\t-- device index (default: 0)\n"
+			"\t\033[1m-c 9700000\033[0m\t-- carrier frequency (default: 9.7 MHz)\n"
+			"\t\033[1m-f 75000\033[0m\t-- FM deviation (default: 75000 Hz, WBFM)\n"
+			"\t\033[1m-i 44100\033[0m\t-- input audio sample rate (default: 44100 Hz for mono FM)\n"
+			"\t\033[1m-s 100e6\033[0m\t-- samplerate in Hz (default: 100 MS/s; the FM signal is output at this value +/- the carrier frequency)\n"
+			"\t\033[1m--rds\033[0m\t\t-- enables RDS (forces audio sample rate to 228 kHz)\n"
+			"\t\033[1m--stereo\033[0m\t-- enables stereo (requires audio sample rate >= 114 kHz)\n"
+			"\t\033[1mfilename\033[0m\t-- the file to read input data from (use '-' to read from stdin)\n\n");
+
+	fprintf(stderr, "\033[34;1mEXAMPLES:\033[0m\n\n"
+			"\033[36;1mList PulseAudio Output Device \"Monitors\":\033[0m\n"
+			"  $ \033[1mpacmd list-sources | egrep --color=never 'name.*monitor' | sed 's/^.*name: <\\(.*\\)>$/\\1/'\033[0m\n"
+			"  $ \033[1mosmo_pulse_device=\"alsa_output.platform-sound.analog-stereo.monitor\"\033[0m\t\t# (replace with your sound device)\n"
+			"\n\n"
+			"\033[36;1mMono FM output at 94.9 MHz:\033[0m\n\n"
+			"  $ \033[1mpacat -r -d $osmo_pulse_device | pv -B 256k | \\\033[0m\n"
+			"    \033[1msox -t raw  -r 44100 -e signed-integer -L -b 16 -c 2 - -c 1 -e signed-integer -b 16 -t raw - \\\033[0m\n"
+			"    \033[1mbiquad 4.76963 -2.98129 0 1 0.78833 0 sinc -15k loudness 5 | \\\033[0m\n"
+			"    \033[1mfl2k_fm - -s 130e6 -c 35100000 -i 44100\033[0m\n"
+			"\n\n"
+			"\033[36;1mStereo FM with RDS output at 95.3 MHz:\033[0m\n\n"
+			"  $ \033[1mpacat -r -d $osmo_pulse_device | pv -B 256k | \\\033[0m\n"
+			"    \033[1msox -t raw -r 44100 -e signed-integer -L -b 16 -c 2 - -c 2 -e signed-integer -b 16 -t raw - \\\033[0m\n"
+			"    \033[1mbiquad 4.76963 -2.98129 0 1 0.78833 0 sinc -15k rate -h 228000 loudness 5 | \\\033[0m\n"
+			"    \033[1mfl2k_fm - -s 130e6 -c 34700000 -i 228000 --stereo --rds\033[0m\n"
+			"\n\n");
+#endif
+
 	exit(1);
 }
 
 #ifdef _WIN32
-BOOL WINAPI
-sighandler(int signum)
-{
+BOOL WINAPI sighandler(int signum) {
 	if (CTRL_C_EVENT == signum) {
-		fprintf(stderr, "Signal caught, exiting!\n");
+		fprintf(stderr, "%sSignal caught, exiting!\n", tagError);
 		fl2k_stop_tx(dev);
 		do_exit = 1;
 		pthread_cond_signal(&fm_cond);
-		return TRUE;
+
+		return (TRUE);
 	}
-	return FALSE;
+
+	return (FALSE);
 }
+
 #else
-static void sighandler(int signum)
-{
-	fprintf(stderr, "Signal caught, exiting!\n");
+static void sighandler(int signum) {
+	fprintf(stderr, "%sSignal caught, exiting!\n", tagError);
 	fl2k_stop_tx(dev);
 	do_exit = 1;
 	pthread_cond_signal(&fm_cond);
 }
+
 #endif
 
-/* DDS Functions */
+
+/* ----- DDS Functions ----- */
 
 #ifndef M_PI
-# define M_PI		3.14159265358979323846	/* pi */
-# define M_PI_2		1.57079632679489661923	/* pi/2 */
-# define M_PI_4		0.78539816339744830962	/* pi/4 */
-# define M_1_PI		0.31830988618379067154	/* 1/pi */
-# define M_2_PI		0.63661977236758134308	/* 2/pi */
+#define M_PI		3.14159265358979323846	/* pi */
+#define M_PI_2		1.57079632679489661923	/* pi/2 */
+#define M_PI_4		0.78539816339744830962	/* pi/4 */
+#define M_1_PI		0.31830988618379067154	/* 1/pi */
+#define M_2_PI		0.63661977236758134308	/* 2/pi */
 #endif
-#define DDS_2PI		(M_PI * 2)		/* 2 * Pi */
-#define DDS_3PI2	(M_PI_2 * 3)		/* 3/2 * pi */
+
+#define DDS_2PI		(M_PI * 2)				/* 2 * Pi */
+#define DDS_3PI2	(M_PI_2 * 3)			/* 3/2 * pi */
 
 #define SIN_TABLE_ORDER	8
 #define SIN_TABLE_SHIFT	(32 - SIN_TABLE_ORDER)
 #define SIN_TABLE_LEN	(1 << SIN_TABLE_ORDER)
-#define ANG_INCR	(0xffffffff / DDS_2PI)
+#define ANG_INCR		(0xFFFFFFFF / DDS_2PI)
+
 
 int8_t sine_table[SIN_TABLE_LEN];
 int sine_table_init = 0;
@@ -153,30 +218,28 @@ typedef struct {
 	unsigned long int phase_slope;
 } dds_t;
 
-static inline void dds_setphase(dds_t *dds, double phase)
-{
+static inline void dds_setphase(dds_t *dds, double phase) {
 	dds->phase = phase * ANG_INCR;
 }
 
-static inline double dds_getphase(dds_t *dds)
-{
+static inline double dds_getphase(dds_t *dds) {
 	return dds->phase / ANG_INCR;
 }
 
-static inline void dds_set_freq(dds_t *dds, double freq, double fslope)
-{
+static inline void dds_set_freq(dds_t *dds, double freq, double fslope) {
 	dds->fslope = fslope;
 	dds->phase_step = (freq / dds->sample_freq) * 2 * M_PI * ANG_INCR;
 
-	/* The slope parameter is used with the FM modulator to create
-	 * a simple but very fast and effective interpolation filter.
-	 * See the fm modulator for details */
+	/*
+	 * The slope parameter is used with the FM modulator to create a simple but very fast and effective interpolation
+	 * filter.
+	 * See the fm modulator for details.
+	 */
 	dds->freq = freq;
 	dds->phase_slope = (fslope / dds->sample_freq) * 2 * M_PI * ANG_INCR;
 }
 
-dds_t dds_init(double sample_freq, double freq, double phase)
-{
+dds_t dds_init(double sample_freq, double freq, double phase) {
 	dds_t dds;
 	int i;
 
@@ -187,47 +250,49 @@ dds_t dds_init(double sample_freq, double freq, double phase)
 	/* Initialize sine table, prescaled for 8 bit signed integer */
 	if (!sine_table_init) {
 		double incr = 1.0 / (double)SIN_TABLE_LEN;
-		for (i = 0; i < SIN_TABLE_LEN; i++)
+
+		for (i = 0; i < SIN_TABLE_LEN; i++) {
 			sine_table[i] = sin(incr * i * DDS_2PI) * 127;
+		}
 
 		sine_table_init = 1;
 	}
 
-	return dds;
+	return (dds);
 }
 
-static inline int8_t dds_real(dds_t *dds)
-{
+static inline int8_t dds_real(dds_t *dds) {
 	int tmp;
 
-	tmp = dds->phase >> SIN_TABLE_SHIFT;
+	tmp = (dds->phase >> SIN_TABLE_SHIFT);
 	dds->phase += dds->phase_step;
-	dds->phase &= 0xffffffff;
+	dds->phase &= 0xFFFFFFFF;
 
 	dds->phase_step += dds->phase_slope;
 
-	return sine_table[tmp];
+	return (sine_table[tmp]);
 }
 
-static inline void dds_real_buf(dds_t *dds, int8_t *buf, int count)
-{
+static inline void dds_real_buf(dds_t *dds, int8_t *buf, int count) {
 	int i;
-	for (i = 0; i < count; i++)
+
+	for (i = 0; i < count; i++) {
 		buf[i] = dds_real(dds);
+	}
 }
+
 
 /* Signal generation and some helpers */
 
-/* Generate the radio signal using the pre-calculated frequency information
- * in the freq buffer */
-static void *fm_worker(void *arg)
-{
+/* Generate the radio signal using the pre-calculated frequency information in the freq buffer */
+static void *fm_worker(void *arg) {
 	register double freq;
 	register double tmp;
 	dds_t carrier;
 	int8_t *tmp_ptr;
 	uint32_t len = 0;
-	uint32_t readlen, remaining;
+	uint32_t readlen;
+	uint32_t remaining;
 	int buf_prefilled = 0;
 
 	/* Prepare the oscillators */
@@ -267,47 +332,44 @@ static void *fm_worker(void *arg)
 	pthread_exit(NULL);
 }
 
-static inline int writelen(int maxlen)
-{
+static inline int writelen(int maxlen) {
 	int rp = readpos;
 	int len;
 	int r;
 
-	if (rp < writepos)
+	if (rp < writepos) {
 		rp += BUFFER_SAMPLES;
+	}
 
 	len = rp - writepos;
 
 	r = len > maxlen ? maxlen : len;
 
-	return r;
+	return (r);
 }
 
-static inline double modulate_sample(int lastwritepos, double lastfreq, double sample)
-{
-	double freq, slope;
+static inline double modulate_sample(int lastwritepos, double lastfreq, double sample) {
+	double freq;
+	double slope;
 
-	/* Calculate modulator frequency at this point to lessen
-	 * the calculations needed in the signal generator */
+	/* Calculate modulator frequency at this point to lessen the calculations needed in the signal generator */
 	freq = sample * delta_freq;
 	freq += carrier_freq;
 
-	/* What we do here is calculate a linear "slope" from
-	the previous sample to this one. This is then used by
-	the modulator to gently increase/decrease the frequency
-	with each sample without the need to recalculate
-	the dds parameters. In fact this gives us a very
-	efficient and pretty good interpolation filter. */
+	/*
+	 * What we do here is calculate a linear "slope" from the previous sample to this one. This is then used by the
+	 * modulator to gently increase/decrease the frequency with each sample without the need to recalculate the DDS
+	 * parameters. In fact, this gives us a very efficient and pretty good interpolation filter.
+	 */
 	slope = freq - lastfreq;
 	slope /= carrier_per_signal;
 	slopebuf[lastwritepos] = slope;
 	freqbuf[writepos] = freq;
 
-	return freq;
+	return (freq);
 }
 
-void fm_modulator_mono(int use_rds)
-{
+void fm_modulator_mono(int use_rds) {
 	unsigned int i;
 	size_t len;
 	double freq;
@@ -322,11 +384,13 @@ void fm_modulator_mono(int use_rds)
 		if (len > 1) {
 			len = fread(audio_buf, 2, len, file);
 
-			if (len == 0)
+			if (len == 0) {
 				do_exit = 1;
+			}
 
-			if (use_rds)
+			if (use_rds) {
 				get_rds_samples(rds_samples, len);
+			}
 
 			for (i = 0; i < len; i++) {
 				sample = audio_buf[i] / 32767.0;
@@ -348,17 +412,21 @@ void fm_modulator_mono(int use_rds)
 	}
 }
 
-void fm_modulator_stereo(int use_rds)
-{
+void fm_modulator_stereo(int use_rds) {
 	unsigned int i;
-	size_t len, sample_cnt;
+	size_t len;
+	size_t sample_cnt;
 	double freq;
 	double lastfreq = carrier_freq;
 	int16_t audio_buf[AUDIO_BUF_SIZE];
 	uint32_t lastwritepos = writepos;
-
-	dds_t pilot, stereo;
-	double L, R, LpR, LmR, sample;
+	dds_t pilot;
+	dds_t stereo;
+	double L;
+	double R;
+	double LpR;
+	double LmR;
+	double sample;
 	double rds_samples[AUDIO_BUF_SIZE];
 
 	/* Prepare stereo carriers */
@@ -367,33 +435,37 @@ void fm_modulator_stereo(int use_rds)
 
 	while (!do_exit) {
 		len = writelen(AUDIO_BUF_SIZE);
-		if (len > 1 && !(len % 2)) {
+		if ((len > 1) && !(len % 2)) {
 			len = fread(audio_buf, 2, len, file);
 
-			if (len == 0)
+			if (len == 0) {
 				do_exit = 1;
+			}
 
 			/* stereo => two audio samples per baseband sample */
-			sample_cnt = len/2;
+			sample_cnt = len / 2;
 
-			if (use_rds)
+			if (use_rds) {
 				get_rds_samples(rds_samples, sample_cnt);
+			}
 
 			for (i = 0; i < sample_cnt; i++) {
-				/* Get samples for both channels, and calculate the 
-				* mono (L+R) and the difference signal used to recreate
-				* the stereo data (L-R). */
-				L = audio_buf[i*2] / 32767.0;
-				R = audio_buf[i*2+1] / 32767.0;
+				/*
+				 * Get samples for both channels, and calculate the mono (L+R) and the difference signals, which are
+				 * then used to recreate the stereo data (L-R) signal
+				 */
+				L = audio_buf[i * 2] / 32767.0;
+				R = audio_buf[i * 2 + 1] / 32767.0;
 				LpR = (L + R) / 2;
 				LmR = (L - R) / 2;
 
-				/* Create a composite sample consisting of the mono
-				* signal at baseband, a 19kHz pilot and a the difference
-				* signal DSB-SC modulated on a 38kHz carrier */
-				sample = 4.05 * LpR;					/* Mono signal */
-				sample += 0.9 * (dds_real(&pilot)/127.0);		/* Pilot */
-				sample += 4.05 * LmR * (dds_real(&stereo)/127.0);	/* DSB-SC stereo */
+				/*
+				 * Create a composite sample consisting of the mono signal at baseband, a 19 kHz pilot tone. and the
+				 * difference signal DSB-SC modulated on a 38kHz carrier.
+				 */
+				sample = 4.05 * LpR;									/* Mono signal */
+				sample += 0.9 * (dds_real(&pilot) / 127.0);				/* Pilot */
+				sample += 4.05 * LmR * (dds_real(&stereo) / 127.0);		/* DSB-SC stereo */
 
 				if (use_rds) {
 					/* add RDS signal */
@@ -416,10 +488,9 @@ void fm_modulator_stereo(int use_rds)
 	}
 }
 
-void fl2k_callback(fl2k_data_info_t *data_info)
-{
+void fl2k_callback(fl2k_data_info_t *data_info) {
 	if (data_info->device_error) {
-		fprintf(stderr, "Device error, exiting.\n");
+		fprintf(stderr, "%sDevice error, exiting.\n", tagError);
 		do_exit = 1;
 		pthread_cond_signal(&fm_cond);
 	}
@@ -427,12 +498,12 @@ void fl2k_callback(fl2k_data_info_t *data_info)
 	pthread_cond_signal(&cb_cond);
 
 	data_info->sampletype_signed = 1;
-	data_info->r_buf = (char *)txbuf;
+	data_info->r_buf = (char*)txbuf;
 }
 
-int main(int argc, char **argv)
-{
-	int r, opt;
+int main(int argc, char *argv[]) {
+	int r;
+	int opt;
 	uint32_t buf_num = 0;
 	int dev_index = 0;
 	pthread_attr_t attr;
@@ -440,46 +511,78 @@ int main(int argc, char **argv)
 	int option_index = 0;
 	int input_freq_specified = 0;
 
-#ifndef _WIN32
-	struct sigaction sigact, sigign;
+#if !defined(_WIN32)
+	struct sigaction sigact;
+	struct sigaction sigign;
 #endif
 
-	static struct option long_options[] =
-	{
-		{"stereo", no_argument, &stereo_flag, 1},
-		{"rds",    no_argument, &rds_flag,    1},
-		{0, 0, 0, 0}
+	static struct option long_options[] = {
+		{ "stereo", no_argument, &stereo_flag, 1 },
+		{ "rds", no_argument, &rds_flag, 1 },
+		{ "help", no_argument, &help_flag, 1 },
+		{ "rds-pi", required_argument, 0, 'p' },
+		{ "rds-ps", required_argument, 0, 'P' },
+		{ "rds-rt", required_argument, 0, 'r' },
+		{ 0, 0, 0, 0 }
 	};
 
+	/* --- Get Command-line Arguments --- */
 	while (1) {
-		opt = getopt_long(argc, argv, "d:c:f:i:s:", long_options, &option_index);
+		opt = getopt_long(argc, argv, "d:c:f:i:s:p::P::r::", long_options, &option_index);
 
 		/* end of options reached */
-		if (opt == -1)
+		if (opt == -1) {
 			break;
+		}
 
 		switch (opt) {
-		case 0:
-			break;
-		case 'd':
-			dev_index = (uint32_t)atoi(optarg);
-			break;
-		case 'c':
-			carrier_freq = (uint32_t)atof(optarg);
-			break;
-		case 'f':
-			delta_freq = (uint32_t)atof(optarg);
-			break;
-		case 'i':
-			input_freq = (uint32_t)atof(optarg);
-			input_freq_specified = 1;
-			break;
-		case 's':
-			samp_rate = (uint32_t)atof(optarg);
-			break;
-		default:
-			usage();
-			break;
+			case 0:
+				break;
+
+			case 'd':
+				dev_index = (uint32_t)atoi(optarg);
+				break;
+
+			case 'c':
+				carrier_freq = (uint32_t)atof(optarg);
+				break;
+
+			case 'f':
+				delta_freq = (uint32_t)atof(optarg);
+				break;
+
+			case 'i':
+				input_freq = (uint32_t)atof(optarg);
+				input_freq_specified = 1;
+				break;
+
+			case 's':
+				samp_rate = (uint32_t)atof(optarg);
+				break;
+
+			case 'p':
+				rds_pi = (uint16_t)atoi(optarg);
+				break;
+
+			case 'P':
+#if 0
+				rds_ps = optarg;
+#else
+				snprintf(rds_ps, 32, "%s", optarg);
+#endif
+				break;
+
+			case 'r':
+#if 0
+				rds_rt = optarg;
+#else
+				snprintf(rds_rt, 32, "%s", optarg);
+#endif
+				break;
+
+			default:
+				usage();
+				break;
 		}
 	}
 
@@ -493,24 +596,25 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 
+	if (help_flag) {
+		usage();
+	}
+
 	if (rds_flag && input_freq_specified) {
 		if (input_freq != RDS_MODULATOR_RATE) {
-			fprintf(stderr, "RDS modulator only works with "
-					"228 kHz audio sample rate!\n");
-			exit(1);
+			fprintf(stderr, "%sRDS modulator only works with 228 kHz audio sample rate!\n", tagError);
+			exit(2);
 		}
 	} else if (rds_flag && !input_freq_specified) {
 		input_freq = RDS_MODULATOR_RATE;
 	}
 
-	if (stereo_flag && input_freq < (RDS_MODULATOR_RATE/2)) {
-		fprintf(stderr, "Audio sample rate needs to be at least "
-				"114 kHz for stereo FM!\n");
-		exit(1);
+	if (stereo_flag && (input_freq < (RDS_MODULATOR_RATE / 2))) {
+		fprintf(stderr, "%sAudio sample rate needs to be at least 114 kHz for stereo FM!\n", tagError);
+		exit(3);
 	}
 
-
-	if (strcmp(filename, "-") == 0) { /* Read samples from stdin */
+	if (strcmp(filename, "-") == 0) {	/* Read samples from stdin */
 		file = stdin;
 #ifdef _WIN32
 		_setmode(_fileno(stdin), _O_BINARY);
@@ -518,17 +622,19 @@ int main(int argc, char **argv)
 	} else {
 		file = fopen(filename, "rb");
 		if (!file) {
-			fprintf(stderr, "Failed to open %s\n", filename);
-			return -ENOENT;
+			fprintf(stderr, "%sFailed to open %s\n", tagError, filename);
+
+			return (-ENOENT);
 		}
 	}
 
-	/* allocate buffer */
+	/* --- allocate buffers --- */
 	buf1 = malloc(FL2K_BUF_LEN);
 	buf2 = malloc(FL2K_BUF_LEN);
+
 	if (!buf1 || !buf2) {
-		fprintf(stderr, "malloc error!\n");
-		exit(1);
+		fprintf(stderr, "%smalloc() failed!\n", tagError);
+		exit(4);
 	}
 
 	fmbuf = buf1;
@@ -540,11 +646,47 @@ int main(int argc, char **argv)
 	readpos = 0;
 	writepos = 1;
 
-	fprintf(stderr, "Samplerate:\t%3.2f MHz\n", (double)samp_rate/1000000);
-	fprintf(stderr, "Carrier:\t%3.2f MHz\n", (double)carrier_freq/1000000);
-	fprintf(stderr, "Frequencies:\t%3.2f MHz, %3.2f MHz\n", 
-					(double)((samp_rate - carrier_freq) / 1000000.0),
-					(double)((samp_rate + carrier_freq) / 1000000.0));
+#if !defined(_WIN32)
+	fprintf(stderr, "\n\n");
+	fprintf(stderr, "  \033[32;1mfl2k_fm output information\033[0m\n");
+	fprintf(stderr, "  \033[32;1m==========================\033[0m\n\n");
+	fprintf(stderr, "    \033[1mSample Rate (base):\033[0m\t%3.2f MHz\n", (double)samp_rate / 1000000.0);
+	fprintf(stderr, "    \033[1mCarrier Frequency:\033[0m\t%3.2f MHz\n", (double)carrier_freq / 1000000.0);
+#if 0
+	fprintf(stderr, "Frequencies:\t%3.2f MHz, %3.2f MHz\n", (double)((samp_rate - carrier_freq) / 1000000.0), (double)((samp_rate + carrier_freq) / 1000000.0));
+#else
+	fprintf(stderr, "    \033[1mFrequency (low):\033[0m\t%3.2f MHz\n", (double)((samp_rate - carrier_freq) / 1000000.0));
+	fprintf(stderr, "    \033[1mFrequency (high):\033[0m\t%3.2f MHz\n", (double)((samp_rate + carrier_freq) / 1000000.0));
+#endif
+
+#if defined(DEBUG)
+	fprintf(stderr, "    \033[1mRDS enabled:\033[0m\t%s\n", rds_flag ? "true" : "false");
+	fprintf(stderr, "    \033[1mRDS PI value:\033[0m\t0x%04X\n", rds_pi);
+	fprintf(stderr, "    \033[1mRDS PS value:\033[0m\t%s\n", rds_ps);
+	fprintf(stderr, "    \033[1mRDS RT value:\033[0m\t%s\n", rds_rt);
+#endif
+#else	/* !defined(_WIN32) */
+	fprintf(stderr, "\n\n");
+	fprintf(stderr, "  fl2k_fm output information\n");
+	fprintf(stderr, "  ==========================\n\n");
+	fprintf(stderr, "    Sample Rate (base):\t%3.2f MHz\n", (double)samp_rate / 1000000.0);
+	fprintf(stderr, "    Carrier Frequency:\t%3.2f MHz\n", (double)carrier_freq / 1000000.0);
+#if 0
+	fprintf(stderr, "Frequencies:\t%3.2f MHz, %3.2f MHz\n", (double)((samp_rate - carrier_freq) / 1000000.0), (double)((samp_rate + carrier_freq) / 1000000.0));
+#else
+	fprintf(stderr, "    Frequency (low):\t%3.2f MHz\n", (double)((samp_rate - carrier_freq) / 1000000.0));
+	fprintf(stderr, "    Frequency (high):\t%3.2f MHz\n", (double)((samp_rate + carrier_freq) / 1000000.0));
+#endif
+
+#if defined(DEBUG)
+	fprintf(stderr, "    RDS enabled:\t%s\n", rds_flag ? "true" : "false");
+	fprintf(stderr, "    RDS PI value:\t0x%04X\n", rds_pi);
+	fprintf(stderr, "    RDS PS value:\t%s\n", rds_ps);
+	fprintf(stderr, "    RDS RT value:\t%s\n", rds_rt);
+#endif
+#endif	/* defined(_WIN32) */
+
+	fprintf(stderr, "\n================================================================================\n\n\n");
 
 	pthread_mutex_init(&cb_mutex, NULL);
 	pthread_mutex_init(&fm_mutex, NULL);
@@ -554,13 +696,13 @@ int main(int argc, char **argv)
 
 	fl2k_open(&dev, (uint32_t)dev_index);
 	if (NULL == dev) {
-		fprintf(stderr, "Failed to open fl2k device #%d.\n", dev_index);
+		fprintf(stderr, "%sFailed to open fl2k device #%d.\n", tagError, dev_index);
 		goto out;
 	}
 
 	r = pthread_create(&fm_thread, &attr, fm_worker, NULL);
 	if (r < 0) {
-		fprintf(stderr, "Error spawning FM worker thread!\n");
+		fprintf(stderr, "%sError spawning FM worker thread!\n", tagError);
 		goto out;
 	}
 
@@ -569,8 +711,9 @@ int main(int argc, char **argv)
 
 	/* Set the sample rate */
 	r = fl2k_set_sample_rate(dev, samp_rate);
-	if (r < 0)
-		fprintf(stderr, "WARNING: Failed to set sample rate. %d\n", r);
+	if (r < 0) {
+		fprintf(stderr, "%sFailed to set sample rate. %d\n", tagWarning, r);
+	}
 
 	/* read back actual frequency */
 	samp_rate = fl2k_get_sample_rate(dev);
@@ -579,11 +722,11 @@ int main(int argc, char **argv)
 	carrier_per_signal = samp_rate / input_freq;
 
 	/* Set RDS parameters */
-	set_rds_pi(0x0dac);
-	set_rds_ps("fl2k_fm");
-	set_rds_rt("VGA FM transmitter");
+	set_rds_pi(rds_pi);
+	set_rds_ps(rds_ps);
+	set_rds_rt(rds_rt);
 
-#ifndef _WIN32
+#if !defined(_WIN32)
 	sigact.sa_handler = sighandler;
 	sigemptyset(&sigact.sa_mask);
 	sigact.sa_flags = 0;
@@ -592,30 +735,40 @@ int main(int argc, char **argv)
 	sigaction(SIGTERM, &sigact, NULL);
 	sigaction(SIGQUIT, &sigact, NULL);
 	sigaction(SIGPIPE, &sigign, NULL);
-#else
-	SetConsoleCtrlHandler( (PHANDLER_ROUTINE) sighandler, TRUE );
-#endif
+#else	/* !defined(_WIN32) */
+	SetConsoleCtrlHandler((PHANDLER_ROUTINE)sighandler, TRUE);
+#endif	/* defined(_WIN32) */
 
 	if (stereo_flag) {
 		fm_modulator_stereo(rds_flag);
 	} else {
-		if (rds_flag)
-			fprintf(stderr, "Warning: RDS with mono (without 19 kHz pilot"
-					" tone) doesn't work with all receivers!\n");
+		if (rds_flag) {
+			fprintf(stderr, "%sRDS with mono (without 19 kHz pilot tone) doesn't work with all receivers!\n", tagWarning);
+		}
 
 		fm_modulator_mono(rds_flag);
 	}
 
 out:
+#if defined(DEBUG)
+	fprintf(stderr, "%sClosing fl2k device...\n", tagDebug);
+#endif
 	fl2k_close(dev);
 
-	if (file != stdin)
+	if (file != stdin) {
+#if defined(DEBUG)
+		fprintf(stderr, "%sClosing file: %s...\n", tagDebug, file);
+#endif
 		fclose(file);
+	}
 
+#if defined(DEBUG)
+	fprintf(stderr, "%sFreeing all buffers...\n", tagDebug);
+#endif
 	free(freqbuf);
 	free(slopebuf);
 	free(buf1);
 	free(buf2);
 
-	return 0;
+	return (0);
 }

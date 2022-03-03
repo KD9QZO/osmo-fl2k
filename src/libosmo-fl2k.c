@@ -31,11 +31,12 @@
 
 #ifndef _WIN32
 #include <unistd.h>
-#define sleep_ms(ms)	usleep(ms*1000)
+#define sleep_ms(ms)	usleep(ms * 1000)
 #else
 #include <windows.h>
 #define sleep_ms(ms)	Sleep(ms)
 #endif
+
 
 /*
  * All libusb callback functions should be marked with the LIBUSB_CALL macro
@@ -47,13 +48,17 @@
 #define LIBUSB_CALL
 #endif
 
+
 /* libusb < 1.0.9 doesn't have libusb_handle_events_timeout_completed */
 #ifndef HAVE_LIBUSB_HANDLE_EVENTS_TIMEOUT_COMPLETED
-#define libusb_handle_events_timeout_completed(ctx, tv, c) \
-	libusb_handle_events_timeout(ctx, tv)
+#define libusb_handle_events_timeout_completed(ctx, tv, c)															\
+		libusb_handle_events_timeout(ctx, tv)
 #endif
 
+
 #include "osmo-fl2k.h"
+
+
 
 enum fl2k_async_status {
 	FL2K_INACTIVE = 0,
@@ -116,30 +121,34 @@ static fl2k_dongle_t known_devices[] = {
 	{ 0x1d5c, 0x2000, "FL2000DX OEM" },
 };
 
+
+
 #define DEFAULT_BUF_NUMBER	4
 
-#define CTRL_IN		(LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_ENDPOINT_IN)
-#define CTRL_OUT	(LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_ENDPOINT_OUT)
-#define CTRL_TIMEOUT	300
-#define BULK_TIMEOUT	0
+#define CTRL_IN				(LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_ENDPOINT_IN)
+#define CTRL_OUT			(LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_ENDPOINT_OUT)
+#define CTRL_TIMEOUT		300
+#define BULK_TIMEOUT		0
 
-static int fl2k_read_reg(fl2k_dev_t *dev, uint16_t reg, uint32_t *val)
-{
+
+
+static int fl2k_read_reg(fl2k_dev_t *dev, uint16_t reg, uint32_t *val) {
 	int r;
 	uint8_t data[4];
 
-	if (!dev || !val)
-		return FL2K_ERROR_INVALID_PARAM;
+	if (!dev || !val) {
+		return (FL2K_ERROR_INVALID_PARAM);
+	}
 
-	r = libusb_control_transfer(dev->devh, CTRL_IN, 0x40,
-				    0, reg, data, 4, CTRL_TIMEOUT);
+	r = libusb_control_transfer(dev->devh, CTRL_IN, 0x40, 0, reg, data, 4, CTRL_TIMEOUT);
 
-	if (r < 4)
+	if (r < 4) {
 		fprintf(stderr, "Error, short read from register!\n");
+	}
 
-	*val = (data[3] << 24) | (data[2] << 16) | (data[1] << 8) | data[0];
+	*val = ((data[3] << 24) | (data[2] << 16) | (data[1] << 8) | data[0]);
 
-	return r;
+	return (r);
 }
 
 static int fl2k_write_reg(fl2k_dev_t *dev, uint16_t reg, uint32_t val)
@@ -234,7 +243,7 @@ int fl2k_set_sample_rate(fl2k_dev_t *dev, uint32_t target_freq)
 	if (!dev)
 		return FL2K_ERROR_INVALID_PARAM;
 
-	/* Output divider (accepts value 1-15) 
+	/* Output divider (accepts value 1-15)
 	 * works, but adds lots of phase noise, so do not use it */
 	out_div = 1;
 
@@ -264,7 +273,7 @@ int fl2k_set_sample_rate(fl2k_dev_t *dev, uint32_t target_freq)
 
 	if (fabs(error) > 1)
 		fprintf(stderr, "Requested sample rate %d not possible, using"
-		                " %f, error is %f\n", target_freq, sample_clock, error); 
+		                " %f, error is %f\n", target_freq, sample_clock, error);
 
 	return fl2k_write_reg(dev, 0x802c, result_reg);
 }
@@ -384,7 +393,7 @@ int fl2k_open(fl2k_dev_t **out_dev, uint32_t index)
 		return -1;
 	}
 
-#if LIBUSB_API_VERSION >= 0x01000106
+#if (LIBUSB_API_VERSION >= 0x01000106)
 	libusb_set_option(dev->ctx, LIBUSB_OPTION_LOG_LEVEL, 3);
 #else
 	libusb_set_debug(dev->ctx, 3);
@@ -597,7 +606,7 @@ static int fl2k_alloc_submit_transfers(fl2k_dev_t *dev)
 	dev->xfer_info = malloc(dev->xfer_buf_num * sizeof(fl2k_xfer_info_t));
 	memset(dev->xfer_info, 0, dev->xfer_buf_num * sizeof(fl2k_xfer_info_t));
 
-#if defined (__linux__) && LIBUSB_API_VERSION >= 0x01000105
+#if (defined(__linux__) && (LIBUSB_API_VERSION >= 0x01000105))
 	fprintf(stderr, "Allocating %d zero-copy buffers\n", dev->xfer_buf_num);
 
 	dev->use_zerocopy = 1;
@@ -611,33 +620,24 @@ static int fl2k_alloc_submit_transfers(fl2k_dev_t *dev)
 			 * to random memory. We check if the buffers are zeroed
 			 * and otherwise fall back to buffers in userspace.
 			 */
-			if (dev->xfer_buf[i][0] || memcmp(dev->xfer_buf[i],
-							  dev->xfer_buf[i] + 1,
-							  dev->xfer_buf_len - 1)) {
-				fprintf(stderr, "Detected Kernel usbfs mmap() "
-						"bug, falling back to buffers "
-						"in userspace\n");
+			if (dev->xfer_buf[i][0] || memcmp(dev->xfer_buf[i], dev->xfer_buf[i] + 1, dev->xfer_buf_len - 1)) {
+				fprintf(stderr, "Detected Kernel usbfs mmap() bug, falling back to buffers in userspace\n");
 				dev->use_zerocopy = 0;
 				break;
 			}
 		} else {
-			fprintf(stderr, "Failed to allocate zero-copy "
-					"buffer for transfer %d\n%sFalling "
-					"back to buffers in userspace\n",
-					i, incr_usbfs);
+			fprintf(stderr, "Failed to allocate zero-copy buffer for transfer %d\n%sFalling back to buffers in userspace\n", i, incr_usbfs);
 			dev->use_zerocopy = 0;
 			break;
 		}
 	}
 
-	/* zero-copy buffer allocation failed (partially or completely)
-	 * we need to free the buffers again if already allocated */
+	/* zero-copy buffer allocation failed (partially or completely) we need to free the buffers again if already allocated */
 	if (!dev->use_zerocopy) {
 		for (i = 0; i < dev->xfer_buf_num; ++i) {
-			if (dev->xfer_buf[i])
-				libusb_dev_mem_free(dev->devh,
-						    dev->xfer_buf[i],
-						    dev->xfer_buf_len);
+			if (dev->xfer_buf[i]) {
+				libusb_dev_mem_free(dev->devh, dev->xfer_buf[i], dev->xfer_buf_len);
+			}
 		}
 	}
 #endif
@@ -647,8 +647,9 @@ static int fl2k_alloc_submit_transfers(fl2k_dev_t *dev)
 		for (i = 0; i < dev->xfer_buf_num; ++i) {
 			dev->xfer_buf[i] = malloc(dev->xfer_buf_len);
 
-			if (!dev->xfer_buf[i])
-				return FL2K_ERROR_NO_MEM;
+			if (!dev->xfer_buf[i]) {
+				return (FL2K_ERROR_NO_MEM);
+			}
 		}
 	}
 
@@ -791,7 +792,7 @@ static void *fl2k_usb_worker(void *arg)
 	pthread_cond_signal(&dev->buf_cond);
 
 	/* wait for sample worker thread to finish before freeing buffers */
-	pthread_join(dev->sample_worker_thread, NULL);  
+	pthread_join(dev->sample_worker_thread, NULL);
 	_fl2k_free_async_buffers(dev);
 	dev->async_status = next_status;
 
@@ -799,77 +800,68 @@ static void *fl2k_usb_worker(void *arg)
 }
 
 /* Buffer format conversion functions for R, G, B DACs */
-static inline void fl2k_convert_r(char *out,
-				  char *in,
-				  uint32_t len,
-				  uint8_t offset)
-{
+static inline void fl2k_convert_r(char *out, char *in, uint32_t len, uint8_t offset) {
 	unsigned int i, j = 0;
 
-	if (!in || !out)
+	if (!in || !out) {
 		return;
+	}
 
 	for (i = 0; i < len; i += 24) {
-		out[i+ 6] = in[j++] + offset;
-		out[i+ 1] = in[j++] + offset;
-		out[i+12] = in[j++] + offset;
-		out[i+15] = in[j++] + offset;
-		out[i+10] = in[j++] + offset;
-		out[i+21] = in[j++] + offset;
-		out[i+16] = in[j++] + offset;
-		out[i+19] = in[j++] + offset;
+		out[i + 6] = in[j++] + offset;
+		out[i + 1] = in[j++] + offset;
+		out[i + 12] = in[j++] + offset;
+		out[i + 15] = in[j++] + offset;
+		out[i + 10] = in[j++] + offset;
+		out[i + 21] = in[j++] + offset;
+		out[i + 16] = in[j++] + offset;
+		out[i + 19] = in[j++] + offset;
 	}
 }
 
-static inline void fl2k_convert_g(char *out,
-				  char *in,
-				  uint32_t len,
-				  uint8_t offset)
-{
+static inline void fl2k_convert_g(char *out, char *in, uint32_t len, uint8_t offset) {
 	unsigned int i, j = 0;
 
-	if (!in || !out)
+	if (!in || !out) {
 		return;
+	}
 
 	for (i = 0; i < len; i += 24) {
-		out[i+ 5] = in[j++] + offset;
-		out[i+ 0] = in[j++] + offset;
-		out[i+ 3] = in[j++] + offset;
-		out[i+14] = in[j++] + offset;
-		out[i+ 9] = in[j++] + offset;
-		out[i+20] = in[j++] + offset;
-		out[i+23] = in[j++] + offset;
-		out[i+18] = in[j++] + offset;
+		out[i + 5] = in[j++] + offset;
+		out[i + 0] = in[j++] + offset;
+		out[i + 3] = in[j++] + offset;
+		out[i + 14] = in[j++] + offset;
+		out[i + 9] = in[j++] + offset;
+		out[i + 20] = in[j++] + offset;
+		out[i + 23] = in[j++] + offset;
+		out[i + 18] = in[j++] + offset;
 	}
 }
 
-static inline void fl2k_convert_b(char *out,
-				  char *in,
-				  uint32_t len,
-				  uint8_t offset)
-{
+static inline void fl2k_convert_b(char *out, char *in, uint32_t len, uint8_t offset) {
 	unsigned int i, j = 0;
 
-	if (!in || !out)
+	if (!in || !out) {
 		return;
+	}
 
 	for (i = 0; i < len; i += 24) {
-		out[i+ 4] = in[j++] + offset;
-		out[i+ 7] = in[j++] + offset;
-		out[i+ 2] = in[j++] + offset;
-		out[i+13] = in[j++] + offset;
-		out[i+ 8] = in[j++] + offset;
-		out[i+11] = in[j++] + offset;
-		out[i+22] = in[j++] + offset;
-		out[i+17] = in[j++] + offset;
+		out[i + 4] = in[j++] + offset;
+		out[i + 7] = in[j++] + offset;
+		out[i + 2] = in[j++] + offset;
+		out[i + 13] = in[j++] + offset;
+		out[i + 8] = in[j++] + offset;
+		out[i + 11] = in[j++] + offset;
+		out[i + 22] = in[j++] + offset;
+		out[i + 17] = in[j++] + offset;
 	}
 }
 
-static void *fl2k_sample_worker(void *arg)
-{
+static void *fl2k_sample_worker(void *arg) {
 	int r = 0;
-	unsigned int i, j;
-	fl2k_dev_t *dev = (fl2k_dev_t *)arg;
+	unsigned int i;
+	unsigned int j;
+	fl2k_dev_t *dev = (fl2k_dev_t*)arg;
 	fl2k_xfer_info_t *xfer_info = NULL;
 	struct libusb_transfer *xfer = NULL;
 	char *out_buf = NULL;
@@ -938,15 +930,14 @@ static void *fl2k_sample_worker(void *arg)
 }
 
 
-int fl2k_start_tx(fl2k_dev_t *dev, fl2k_tx_cb_t cb, void *ctx,
-		  uint32_t buf_num)
-{
+int fl2k_start_tx(fl2k_dev_t *dev, fl2k_tx_cb_t cb, void *ctx, uint32_t buf_num) {
 	int r = 0;
 	int i;
 	pthread_attr_t attr;
 
-	if (!dev || !cb)
-		return FL2K_ERROR_INVALID_PARAM;
+	if (!dev || !cb) {
+		return (FL2K_ERROR_INVALID_PARAM);
+	}
 
 	dev->async_status = FL2K_RUNNING;
 	dev->async_cancel = 0;
@@ -954,33 +945,32 @@ int fl2k_start_tx(fl2k_dev_t *dev, fl2k_tx_cb_t cb, void *ctx,
 	dev->cb = cb;
 	dev->cb_ctx = ctx;
 
-	if (buf_num > 0)
+	if (buf_num > 0) {
 		dev->xfer_num = buf_num;
-	else
+	} else {
 		dev->xfer_num = DEFAULT_BUF_NUMBER;
+	}
 
-	/* have two spare buffers that can be filled while the
-	 * others are submitted */
+	/* have two spare buffers that can be filled while the others are submitted */
 	dev->xfer_buf_num = dev->xfer_num + 2;
 	dev->xfer_buf_len = FL2K_XFER_LEN;
 
 	r = fl2k_alloc_submit_transfers(dev);
-	if (r < 0)
+	if (r < 0) {
 		goto cleanup;
+	}
 
 	pthread_mutex_init(&dev->buf_mutex, NULL);
 	pthread_cond_init(&dev->buf_cond, NULL);
 	pthread_attr_init(&attr);
 
-	r = pthread_create(&dev->usb_worker_thread, &attr,
-			   fl2k_usb_worker, (void *)dev);
+	r = pthread_create(&dev->usb_worker_thread, &attr, fl2k_usb_worker, (void*)dev);
 	if (r < 0) {
 		fprintf(stderr, "Error spawning USB worker thread!\n");
 		goto cleanup;
 	}
 
-	r = pthread_create(&dev->sample_worker_thread, &attr,
-			   fl2k_sample_worker, (void *)dev);
+	r = pthread_create(&dev->sample_worker_thread, &attr, fl2k_sample_worker, (void*)dev);
 	if (r < 0) {
 		fprintf(stderr, "Error spawning sample worker thread!\n");
 		goto cleanup;
@@ -988,16 +978,15 @@ int fl2k_start_tx(fl2k_dev_t *dev, fl2k_tx_cb_t cb, void *ctx,
 
 	pthread_attr_destroy(&attr);
 
-	return 0;
+	return (0);
 
 cleanup:
 	_fl2k_free_async_buffers(dev);
-	return FL2K_ERROR_BUSY;
 
+	return (FL2K_ERROR_BUSY);
 }
 
-int fl2k_stop_tx(fl2k_dev_t *dev)
-{
+int fl2k_stop_tx(fl2k_dev_t *dev) {
 	if (!dev)
 		return FL2K_ERROR_INVALID_PARAM;
 
@@ -1044,7 +1033,7 @@ int fl2k_i2c_read(fl2k_dev_t *dev, uint8_t i2c_addr, uint8_t reg_addr, uint8_t *
 		if (r < 0)
 			return r;
 
-		/* check if operation completed */ 
+		/* check if operation completed */
 		if (reg & (1 << 31)) {
 			timeout = 0;
 			break;
@@ -1059,12 +1048,10 @@ int fl2k_i2c_read(fl2k_dev_t *dev, uint8_t i2c_addr, uint8_t reg_addr, uint8_t *
 		return FL2K_ERROR_NOT_FOUND;
 
 	/* read data from register 0x8024 */
-	return libusb_control_transfer(dev->devh, CTRL_IN, 0x40,
-				       0, 0x8024, data, 4, CTRL_TIMEOUT);
+	return libusb_control_transfer(dev->devh, CTRL_IN, 0x40, 0, 0x8024, data, 4, CTRL_TIMEOUT);
 }
 
-int fl2k_i2c_write(fl2k_dev_t *dev, uint8_t i2c_addr, uint8_t reg_addr, uint8_t *data)
-{
+int fl2k_i2c_write(fl2k_dev_t *dev, uint8_t i2c_addr, uint8_t reg_addr, uint8_t *data) {
 	int i, r, timeout = 1;
 	uint32_t reg;
 
@@ -1099,7 +1086,7 @@ int fl2k_i2c_write(fl2k_dev_t *dev, uint8_t i2c_addr, uint8_t reg_addr, uint8_t 
 		if (r < 0)
 			return r;
 
-		/* check if operation completed */ 
+		/* check if operation completed */
 		if (reg & (1 << 31)) {
 			timeout = 0;
 			break;

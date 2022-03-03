@@ -18,8 +18,9 @@
 ########################################################################
 # Install public header files
 ########################################################################
+
 install(FILES
-    osmo-fl2k.h
-    osmo-fl2k_export.h
-    DESTINATION include
+	osmo-fl2k.h
+	osmo-fl2k_export.h
+	DESTINATION include
 )

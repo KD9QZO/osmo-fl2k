@@ -46,42 +46,37 @@ static volatile int repeat = 1;
 FILE *file;
 char *txbuf = NULL;
 
-void usage(void)
-{
-	fprintf(stderr,
-		"fl2k_file, a sample player for FL2K VGA dongles\n\n"
-		"Usage:\n"
-		"\t[-d device_index (default: 0)]\n"
-		"\t[-r repeat file (default: 1)]\n"
-		"\t[-s samplerate (default: 100 MS/s)]\n"
-		"\tfilename (use '-' to read from stdin)\n\n"
-	);
+void usage(void) {
+	fprintf(stderr, "fl2k_file, a sample player for FL2K VGA dongles\n\n"
+			"Usage:\n"
+			"\t[-d device_index (default: 0)]\n"
+			"\t[-r repeat file (default: 1)]\n"
+			"\t[-s samplerate (default: 100 MS/s)]\n"
+			"\tfilename (use '-' to read from stdin)\n\n");
+
 	exit(1);
 }
 
 #ifdef _WIN32
-BOOL WINAPI
-sighandler(int signum)
-{
+BOOL WINAPI sighandler(int signum) {
 	if (CTRL_C_EVENT == signum) {
 		fprintf(stderr, "Signal caught, exiting!\n");
 		fl2k_stop_tx(dev);
 		do_exit = 1;
 		return TRUE;
 	}
+
 	return FALSE;
 }
 #else
-static void sighandler(int signum)
-{
+static void sighandler(int signum) {
 	fprintf(stderr, "Signal caught, exiting!\n");
 	fl2k_stop_tx(dev);
 	do_exit = 1;
 }
 #endif
 
-void fl2k_callback(fl2k_data_info_t *data_info)
-{
+void fl2k_callback(fl2k_data_info_t *data_info) {
 	int r, left = FL2K_BUF_LEN;
 	static uint32_t repeat_cnt = 0;
 
