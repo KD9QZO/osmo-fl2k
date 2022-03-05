@@ -151,109 +151,110 @@ static int fl2k_read_reg(fl2k_dev_t *dev, uint16_t reg, uint32_t *val) {
 	return (r);
 }
 
-static int fl2k_write_reg(fl2k_dev_t *dev, uint16_t reg, uint32_t val)
-{
+static int fl2k_write_reg(fl2k_dev_t *dev, uint16_t reg, uint32_t val) {
 	uint8_t data[4];
 
-	if (!dev)
-		return FL2K_ERROR_INVALID_PARAM;
+	if (!dev) {
+		return (FL2K_ERROR_INVALID_PARAM);
+	}
 
-	data[0] = val & 0xff;
-	data[1] = (val >> 8) & 0xff;
-	data[2] = (val >> 16) & 0xff;
-	data[3] = (val >> 24) & 0xff;
+	data[0] = (val & 0xFF);
+	data[1] = ((val >> 8) & 0xFF);
+	data[2] = ((val >> 16) & 0xFF);
+	data[3] = ((val >> 24) & 0xFF);
 
-	return libusb_control_transfer(dev->devh, CTRL_OUT, 0x41,
-				       0, reg, data, 4, CTRL_TIMEOUT);
+	return libusb_control_transfer(dev->devh, CTRL_OUT, 0x41, 0, reg, data, 4, CTRL_TIMEOUT);
 }
 
-int fl2k_init_device(fl2k_dev_t *dev)
-{
-	if (!dev)
-		return FL2K_ERROR_INVALID_PARAM;
+int fl2k_init_device(fl2k_dev_t *dev) {
+	if (!dev) {
+		return (FL2K_ERROR_INVALID_PARAM);
+	}
 
 	/* initialization */
-	fl2k_write_reg(dev, 0x8020, 0xdf0000cc);
+	fl2k_write_reg(dev, 0x8020, 0xDF0000CC);
 
-	/* set DAC freq to lowest value possible to avoid
-	 * underrun during init */
-	fl2k_write_reg(dev, 0x802c, 0x00416f3f);
+	/* set DAC freq to lowest value possible to avoid underrun during init */
+	fl2k_write_reg(dev, 0x802c, 0x00416F3F);
 
-	fl2k_write_reg(dev, 0x8048, 0x7ffb8004);
-	fl2k_write_reg(dev, 0x803c, 0xd701004d);
-	fl2k_write_reg(dev, 0x8004, 0x0000031c);
-	fl2k_write_reg(dev, 0x8004, 0x0010039d);
+	fl2k_write_reg(dev, 0x8048, 0x7FFB8004);
+	fl2k_write_reg(dev, 0x803c, 0xD701004D);
+	fl2k_write_reg(dev, 0x8004, 0x0000031C);
+	fl2k_write_reg(dev, 0x8004, 0x0010039D);
 	fl2k_write_reg(dev, 0x8008, 0x07800898);
 
 	fl2k_write_reg(dev, 0x801c, 0x00000000);
 	fl2k_write_reg(dev, 0x0070, 0x04186085);
 
 	/* blanking magic */
-	fl2k_write_reg(dev, 0x8008, 0xfeff0780);
-	fl2k_write_reg(dev, 0x800c, 0x0000f001);
+	fl2k_write_reg(dev, 0x8008, 0xFEFF0780);
+	fl2k_write_reg(dev, 0x800c, 0x0000F001);
 
 	/* VSYNC magic */
-	fl2k_write_reg(dev, 0x8010, 0x0400042a);
-	fl2k_write_reg(dev, 0x8014, 0x0010002d);
+	fl2k_write_reg(dev, 0x8010, 0x0400042A);
+	fl2k_write_reg(dev, 0x8014, 0x0010002D);
 
 	fl2k_write_reg(dev, 0x8004, 0x00000002);
 
-	return 0;
+	return (0);
 }
 
-int fl2k_deinit_device(fl2k_dev_t *dev)
-{
+int fl2k_deinit_device(fl2k_dev_t *dev) {
 	int r = 0;
 
-	if (!dev)
-		return FL2K_ERROR_INVALID_PARAM;
+	if (!dev) {
+		return (FL2K_ERROR_INVALID_PARAM);
+	}
 
 	/* TODO, power down DACs, PLL, put device in reset */
 
-	return r;
+	return (r);
 }
 
-static double fl2k_reg_to_freq(uint32_t reg)
-{
-	double sample_clock, offset, offs_div;
+static double fl2k_reg_to_freq(uint32_t reg) {
+	double sample_clock;
+	double offset;
+	double offs_div;
 	uint32_t pll_clock = 160000000;
 	uint8_t div = reg & 0x3f;
-	uint8_t out_div = (reg >> 8) & 0xf;
-	uint8_t frac = (reg >> 16) & 0xf;
-	uint8_t mult = (reg >> 20) & 0xf;
+	uint8_t out_div = ((reg >> 8) & 0x0F);
+	uint8_t frac = ((reg >> 16) & 0x0F);
+	uint8_t mult = ((reg >> 20) & 0x0F);
 
 	sample_clock = (pll_clock * mult) / (uint32_t)div;
 	offs_div = (pll_clock / 5.0f ) * mult;
-	offset = ((double)sample_clock/(offs_div/2)) * 1000000.0f;
+	offset = ((double)sample_clock / (offs_div / 2)) * 1000000.0f;
 	sample_clock += (uint32_t)offset * frac;
 	sample_clock /= out_div;
 
-//	fprintf(stderr, "div: %d\tod: %d\tfrac: %d\tmult %d\tclock: %f\treg "
-//			"%08x\n", div, out_div, frac, mult, sample_clock, reg);
+//	fprintf(stderr, "div: %d\tod: %d\tfrac: %d\tmult %d\tclock: %f\treg %08x\n", div, out_div, frac, mult, sample_clock, reg);
 
-	return sample_clock;
+	return (sample_clock);
 }
 
-int fl2k_set_sample_rate(fl2k_dev_t *dev, uint32_t target_freq)
-{
-	double sample_clock, error, last_error = 1e20f;
-	uint32_t reg = 0, result_reg = 0;
-	uint8_t div, mult, frac, out_div;
+int fl2k_set_sample_rate(fl2k_dev_t *dev, uint32_t target_freq) {
+	double sample_clock;
+	double error;
+	double last_error = 1e20f;
+	uint32_t reg = 0;
+	uint32_t result_reg = 0;
+	uint8_t div;
+	uint8_t mult;
+	uint8_t frac;
+	uint8_t out_div;
 
-	if (!dev)
-		return FL2K_ERROR_INVALID_PARAM;
+	if (!dev) {
+		return (FL2K_ERROR_INVALID_PARAM);
+	}
 
-	/* Output divider (accepts value 1-15)
-	 * works, but adds lots of phase noise, so do not use it */
+	/* Output divider (accepts value 1-15) works, but adds lots of phase noise, so do not use it */
 	out_div = 1;
 
-	/* Observation: PLL multiplier of 7 works, but has more phase
-	 * noise. Prefer multiplier 6 and 5 */
+	/* Observation: PLL multiplier of 7 works, but has more phase noise. Prefer multiplier 6 and 5 */
 	for (mult = 6; mult >= 3; mult--) {
 		for (div = 63; div > 1; div--) {
 			for (frac = 1; frac <= 15; frac++) {
-				reg =  (mult << 20) | (frac << 16) |
-				       (0x60 << 8) | (out_div << 8) | div;
+				reg =  ((mult << 20) | (frac << 16) | (0x60 << 8) | (out_div << 8) | div);
 
 				sample_clock = fl2k_reg_to_freq(reg);
 				error = sample_clock - (double)target_freq;
@@ -271,39 +272,38 @@ int fl2k_set_sample_rate(fl2k_dev_t *dev, uint32_t target_freq)
 	error = sample_clock - (double)target_freq;
 	dev->rate = sample_clock;
 
-	if (fabs(error) > 1)
-		fprintf(stderr, "Requested sample rate %d not possible, using"
-		                " %f, error is %f\n", target_freq, sample_clock, error);
+	if (fabs(error) > 1) {
+		fprintf(stderr, "Requested sample rate %d not possible, using %f, error is %f\n", target_freq, sample_clock, error);
+	}
 
-	return fl2k_write_reg(dev, 0x802c, result_reg);
+	return (fl2k_write_reg(dev, 0x802C, result_reg));
 }
 
-uint32_t fl2k_get_sample_rate(fl2k_dev_t *dev)
-{
-	if (!dev)
-		return 0;
+uint32_t fl2k_get_sample_rate(fl2k_dev_t *dev) {
+	if (!dev) {
+		return (0);
+	}
 
-	return (uint32_t)dev->rate;
+	return ((uint32_t)dev->rate);
 }
 
-static fl2k_dongle_t *find_known_device(uint16_t vid, uint16_t pid)
-{
+static fl2k_dongle_t *find_known_device(uint16_t vid, uint16_t pid) {
 	unsigned int i;
 	fl2k_dongle_t *device = NULL;
 
-	for (i = 0; i < sizeof(known_devices)/sizeof(fl2k_dongle_t); i++ ) {
-		if (known_devices[i].vid == vid && known_devices[i].pid == pid) {
+	for (i = 0; i < sizeof(known_devices) / sizeof(fl2k_dongle_t); i++) {
+		if ((known_devices[i].vid == vid) && (known_devices[i].pid == pid)) {
 			device = &known_devices[i];
 			break;
 		}
 	}
 
-	return device;
+	return (device);
 }
 
-uint32_t fl2k_get_device_count(void)
-{
-	int i,r;
+uint32_t fl2k_get_device_count(void) {
+	int i;
+	int r;
 	libusb_context *ctx;
 	libusb_device **list;
 	uint32_t device_count = 0;
@@ -311,28 +311,30 @@ uint32_t fl2k_get_device_count(void)
 	ssize_t cnt;
 
 	r = libusb_init(&ctx);
-	if (r < 0)
-		return 0;
+	if (r < 0) {
+		return (0);
+	}
 
 	cnt = libusb_get_device_list(ctx, &list);
 
 	for (i = 0; i < cnt; i++) {
 		libusb_get_device_descriptor(list[i], &dd);
 
-		if (find_known_device(dd.idVendor, dd.idProduct))
+		if (find_known_device(dd.idVendor, dd.idProduct)) {
 			device_count++;
+		}
 	}
 
 	libusb_free_device_list(list, 1);
 
 	libusb_exit(ctx);
 
-	return device_count;
+	return (device_count);
 }
 
-const char *fl2k_get_device_name(uint32_t index)
-{
-	int i,r;
+const char *fl2k_get_device_name(uint32_t index) {
+	int i;
+	int r;
 	libusb_context *ctx;
 	libusb_device **list;
 	struct libusb_device_descriptor dd;
@@ -369,8 +371,7 @@ const char *fl2k_get_device_name(uint32_t index)
 		return "";
 }
 
-int fl2k_open(fl2k_dev_t **out_dev, uint32_t index)
-{
+int fl2k_open(fl2k_dev_t **out_dev, uint32_t index) {
 	int r;
 	int i;
 	libusb_device **list;
@@ -382,15 +383,17 @@ int fl2k_open(fl2k_dev_t **out_dev, uint32_t index)
 	ssize_t cnt;
 
 	dev = malloc(sizeof(fl2k_dev_t));
-	if (NULL == dev)
-		return -ENOMEM;
+	if (NULL == dev) {
+		return (-ENOMEM);
+	}
 
 	memset(dev, 0, sizeof(fl2k_dev_t));
 
 	r = libusb_init(&dev->ctx);
-	if(r < 0){
+	if (r < 0) {
 		free(dev);
-		return -1;
+
+		return (-1);
 	}
 
 #if (LIBUSB_API_VERSION >= 0x01000106)
@@ -412,8 +415,9 @@ int fl2k_open(fl2k_dev_t **out_dev, uint32_t index)
 			device_count++;
 		}
 
-		if (index == device_count - 1)
+		if (index == device_count - 1) {
 			break;
+		}
 
 		device = NULL;
 	}
@@ -427,9 +431,9 @@ int fl2k_open(fl2k_dev_t **out_dev, uint32_t index)
 	libusb_free_device_list(list, 1);
 	if (r < 0) {
 		fprintf(stderr, "usb_open error %d\n", r);
-		if(r == LIBUSB_ERROR_ACCESS)
-			fprintf(stderr, "Please fix the device permissions, e.g. "
-			"by installing the udev rules file\n");
+		if (r == LIBUSB_ERROR_ACCESS) {
+			fprintf(stderr, "Please fix the device permissions, e.g. by installing the udev rules file\n");
+		}
 		goto err;
 	}
 
@@ -508,9 +512,7 @@ int fl2k_close(fl2k_dev_t *dev)
 	return 0;
 }
 
-static struct libusb_transfer *fl2k_get_next_xfer(fl2k_dev_t *dev,
-					          fl2k_buf_state_t state)
-{
+static struct libusb_transfer *fl2k_get_next_xfer(fl2k_dev_t *dev, fl2k_buf_state_t state) {
 	unsigned int i;
 	int next_buf = -1;
 	uint64_t next_seq = 0;
@@ -518,30 +520,31 @@ static struct libusb_transfer *fl2k_get_next_xfer(fl2k_dev_t *dev,
 
 	for (i = 0; i < dev->xfer_buf_num; i++) {
 		xfer_info = (fl2k_xfer_info_t *)dev->xfer[i]->user_data;
-		if (!xfer_info)
+		if (!xfer_info) {
 			continue;
+		}
 
 		if (xfer_info->state == state) {
 			if (state == BUF_EMPTY) {
-				return dev->xfer[i];
-			} else if ((xfer_info->seq < next_seq) || next_buf < 0) {
+				return (dev->xfer[i]);
+			} else if ((xfer_info->seq < next_seq) || (next_buf < 0)) {
 				next_seq = xfer_info->seq;
 				next_buf = i;
 			}
 		}
 	}
 
-	if ((state == BUF_FILLED) && (next_buf >= 0))
-		return dev->xfer[next_buf];
-	else
-		return NULL;
+	if ((state == BUF_FILLED) && (next_buf >= 0)) {
+		return (dev->xfer[next_buf]);
+	} else {
+		return (NULL);
+	}
 }
 
-static void LIBUSB_CALL _libusb_callback(struct libusb_transfer *xfer)
-{
-	fl2k_xfer_info_t *xfer_info = (fl2k_xfer_info_t *)xfer->user_data;
+static void LIBUSB_CALL _libusb_callback(struct libusb_transfer *xfer) {
+	fl2k_xfer_info_t *xfer_info = (fl2k_xfer_info_t*)xfer->user_data;
 	fl2k_xfer_info_t *next_xfer_info;
-	fl2k_dev_t *dev = (fl2k_dev_t *)xfer_info->dev;
+	fl2k_dev_t *dev = (fl2k_dev_t*)xfer_info->dev;
 	struct libusb_transfer *next_xfer = NULL;
 	int r = 0;
 
@@ -583,25 +586,26 @@ static void LIBUSB_CALL _libusb_callback(struct libusb_transfer *xfer)
 	}
 }
 
-static int fl2k_alloc_submit_transfers(fl2k_dev_t *dev)
-{
+static int fl2k_alloc_submit_transfers(fl2k_dev_t *dev) {
 	unsigned int i;
 	int r = 0;
 	const char *incr_usbfs = "Please increase your allowed usbfs buffer"
-				 " size with the following command:\n"
-				 "echo 0 > /sys/module/usbcore/parameters/"
-				 "usbfs_memory_mb\n";
+			 " size with the following command:\n"
+			 "echo 0 > /sys/module/usbcore/parameters/"
+			 "usbfs_memory_mb\n";
 
-	if (!dev)
-		return FL2K_ERROR_INVALID_PARAM;
+	if (!dev) {
+		return (FL2K_ERROR_INVALID_PARAM);
+	}
 
-	dev->xfer = malloc(dev->xfer_buf_num * sizeof(struct libusb_transfer *));
+	dev->xfer = malloc(dev->xfer_buf_num * sizeof(struct libusb_transfer*));
 
-	for (i = 0; i < dev->xfer_buf_num; ++i)
+	for (i = 0; i < dev->xfer_buf_num; ++i) {
 		dev->xfer[i] = libusb_alloc_transfer(0);
+	}
 
-	dev->xfer_buf = malloc(dev->xfer_buf_num * sizeof(unsigned char *));
-	memset(dev->xfer_buf, 0, dev->xfer_buf_num * sizeof(unsigned char *));
+	dev->xfer_buf = malloc(dev->xfer_buf_num * sizeof(unsigned char*));
+	memset(dev->xfer_buf, 0, dev->xfer_buf_num * sizeof(unsigned char*));
 
 	dev->xfer_info = malloc(dev->xfer_buf_num * sizeof(fl2k_xfer_info_t));
 	memset(dev->xfer_info, 0, dev->xfer_buf_num * sizeof(fl2k_xfer_info_t));
@@ -655,22 +659,15 @@ static int fl2k_alloc_submit_transfers(fl2k_dev_t *dev)
 
 	/* fill transfers */
 	for (i = 0; i < dev->xfer_buf_num; ++i) {
-		libusb_fill_bulk_transfer(dev->xfer[i],
-					  dev->devh,
-					  0x01,
-					  dev->xfer_buf[i],
-					  dev->xfer_buf_len,
-					  _libusb_callback,
-					  &dev->xfer_info[i],
-					  0);
+		libusb_fill_bulk_transfer(dev->xfer[i], dev->devh, 0x01, dev->xfer_buf[i], dev->xfer_buf_len, _libusb_callback, &dev->xfer_info[i], 0);
 
 		dev->xfer_info[i].dev = dev;
 		dev->xfer_info[i].state = BUF_EMPTY;
 
-		/* if we allocate the memory through the Kernel, it is
-		 * already cleared */
-		if (!dev->use_zerocopy)
+		/* if we allocate the memory through the Kernel, it is already cleared */
+		if (!dev->use_zerocopy) {
 			memset(dev->xfer_buf[i], 0, dev->xfer_buf_len);
+		}
 	}
 
 	/* submit transfers */
@@ -679,21 +676,20 @@ static int fl2k_alloc_submit_transfers(fl2k_dev_t *dev)
 		dev->xfer_info[i].state = BUF_SUBMITTED;
 
 		if (r < 0) {
-			fprintf(stderr, "Failed to submit transfer %i\n%s",
-					i, incr_usbfs);
+			fprintf(stderr, "Failed to submit transfer %i\n%s", i, incr_usbfs);
 			break;
 		}
 	}
 
-	return 0;
+	return (0);
 }
 
-static int _fl2k_free_async_buffers(fl2k_dev_t *dev)
-{
+static int _fl2k_free_async_buffers(fl2k_dev_t *dev) {
 	unsigned int i;
 
-	if (!dev)
-		return FL2K_ERROR_INVALID_PARAM;
+	if (!dev) {
+		return (FL2K_ERROR_INVALID_PARAM);
+	}
 
 	if (dev->xfer) {
 		for (i = 0; i < dev->xfer_buf_num; ++i) {
@@ -710,10 +706,8 @@ static int _fl2k_free_async_buffers(fl2k_dev_t *dev)
 		for (i = 0; i < dev->xfer_buf_num; ++i) {
 			if (dev->xfer_buf[i]) {
 				if (dev->use_zerocopy) {
-#if defined (__linux__) && LIBUSB_API_VERSION >= 0x01000105
-					libusb_dev_mem_free(dev->devh,
-							    dev->xfer_buf[i],
-							    dev->xfer_buf_len);
+#if (defined(__linux__) && (LIBUSB_API_VERSION >= 0x01000105))
+					libusb_dev_mem_free(dev->devh, dev->xfer_buf[i], dev->xfer_buf_len);
 #endif
 				} else {
 					free(dev->xfer_buf[i]);
@@ -725,12 +719,11 @@ static int _fl2k_free_async_buffers(fl2k_dev_t *dev)
 		dev->xfer_buf = NULL;
 	}
 
-	return 0;
+	return (0);
 }
 
-static void *fl2k_usb_worker(void *arg)
-{
-	fl2k_dev_t *dev = (fl2k_dev_t *)arg;
+static void *fl2k_usb_worker(void *arg) {
+	fl2k_dev_t *dev = (fl2k_dev_t*)arg;
 	struct timeval tv = { 1, 0 };
 	struct timeval zerotv = { 0, 0 };
 	enum fl2k_async_status next_status = FL2K_INACTIVE;
@@ -738,13 +731,11 @@ static void *fl2k_usb_worker(void *arg)
 	unsigned int i;
 
 	while (FL2K_RUNNING == dev->async_status) {
-		r = libusb_handle_events_timeout_completed(dev->ctx, &tv,
-							   &dev->async_cancel);
+		r = libusb_handle_events_timeout_completed(dev->ctx, &tv, &dev->async_cancel);
 	}
 
 	while (FL2K_INACTIVE != dev->async_status) {
-		r = libusb_handle_events_timeout_completed(dev->ctx, &tv,
-							   &dev->async_cancel);
+		r = libusb_handle_events_timeout_completed(dev->ctx, &tv, &dev->async_cancel);
 		if (r < 0) {
 			/*fprintf(stderr, "handle_events returned: %d\n", r);*/
 			if (r == LIBUSB_ERROR_INTERRUPTED) /* stray signal */
@@ -755,34 +746,30 @@ static void *fl2k_usb_worker(void *arg)
 		if (FL2K_CANCELING == dev->async_status) {
 			next_status = FL2K_INACTIVE;
 
-			if (!dev->xfer)
+			if (!dev->xfer) {
 				break;
+			}
 
 			for (i = 0; i < dev->xfer_buf_num; ++i) {
-				if (!dev->xfer[i])
+				if (!dev->xfer[i]) {
 					continue;
+				}
 
-				if (LIBUSB_TRANSFER_CANCELLED !=
-						dev->xfer[i]->status) {
+				if (LIBUSB_TRANSFER_CANCELLED != dev->xfer[i]->status) {
 					r = libusb_cancel_transfer(dev->xfer[i]);
-					/* handle events after canceling
-					 * to allow transfer status to
-					 * propagate */
-					libusb_handle_events_timeout_completed(dev->ctx,
-									       &zerotv, NULL);
-					if (r < 0)
+					/* handle events after canceling to allow transfer status to propagate */
+					libusb_handle_events_timeout_completed(dev->ctx, &zerotv, NULL);
+					if (r < 0) {
 						continue;
+					}
 
 					next_status = FL2K_CANCELING;
 				}
 			}
 
-			if (dev->dev_lost || FL2K_INACTIVE == next_status) {
-				/* handle any events that still need to
-				 * be handled before exiting after we
-				 * just cancelled all transfers */
-				libusb_handle_events_timeout_completed(dev->ctx,
-								       &zerotv, NULL);
+			if (dev->dev_lost || (FL2K_INACTIVE == next_status)) {
+				/* handle any events that still need to be handled before exiting after we just cancelled all transfers */
+				libusb_handle_events_timeout_completed(dev->ctx, &zerotv, NULL);
 				break;
 			}
 		}
@@ -987,51 +974,60 @@ cleanup:
 }
 
 int fl2k_stop_tx(fl2k_dev_t *dev) {
-	if (!dev)
-		return FL2K_ERROR_INVALID_PARAM;
+	if (!dev) {
+		return (FL2K_ERROR_INVALID_PARAM);
+	}
 
 	/* if streaming, try to cancel gracefully */
 	if (FL2K_RUNNING == dev->async_status) {
 		dev->async_status = FL2K_CANCELING;
 		dev->async_cancel = 1;
-		return 0;
+
+		return (0);
 	/* if called while in pending state, change the state forcefully */
 	} else if (FL2K_INACTIVE != dev->async_status) {
 		dev->async_status = FL2K_INACTIVE;
-		return 0;
+
+		return (0);
 	}
 
-	return FL2K_ERROR_BUSY;
+	return (FL2K_ERROR_BUSY);
 }
 
-int fl2k_i2c_read(fl2k_dev_t *dev, uint8_t i2c_addr, uint8_t reg_addr, uint8_t *data)
-{
-	int i, r, timeout = 1;
+
+int fl2k_i2c_read(fl2k_dev_t *dev, uint8_t i2c_addr, uint8_t reg_addr, uint8_t *data) {
+	int i;
+	int r;
+	int timeout = 1;
 	uint32_t reg;
 
-	if (!dev)
-		return FL2K_ERROR_INVALID_PARAM;
+	if (!dev) {
+		return (FL2K_ERROR_INVALID_PARAM);
+	}
 
 	r = fl2k_read_reg(dev, 0x8020, &reg);
-	if (r < 0)
-		return r;
+	if (r < 0) {
+		return (r);
+	}
 
 	/* apply mask, clearing bit 30 disables periodic repetition of read */
-	reg &= 0x3ffc0000;
+	reg &= 0x3FFC0000;
 
 	/* set I2C register and address, select I2C read (bit 7) */
-	reg |= (1 << 28) | (reg_addr << 8) | (1 << 7) | (i2c_addr & 0x7f);
+	reg |= ((1 << 28) | (reg_addr << 8) | (1 << 7) | (i2c_addr & 0x7F));
 
 	r = fl2k_write_reg(dev, 0x8020, reg);
-	if (r < 0)
-		return r;
+	if (r < 0) {
+		return (r);
+	}
 
 	for (i = 0; i < 10; i++) {
 		sleep_ms(10);
 
 		r = fl2k_read_reg(dev, 0x8020, &reg);
-		if (r < 0)
-			return r;
+		if (r < 0) {
+			return (r);
+		}
 
 		/* check if operation completed */
 		if (reg & (1 << 31)) {
@@ -1040,51 +1036,59 @@ int fl2k_i2c_read(fl2k_dev_t *dev, uint8_t i2c_addr, uint8_t reg_addr, uint8_t *
 		}
 	}
 
-	if (timeout)
-		return FL2K_ERROR_TIMEOUT;
+	if (timeout) {
+		return (FL2K_ERROR_TIMEOUT);
+	}
 
 	/* check if slave responded and all data was read */
-	if (reg & (0x0f << 24))
-		return FL2K_ERROR_NOT_FOUND;
+	if (reg & (0x0f << 24)) {
+		return (FL2K_ERROR_NOT_FOUND);
+	}
 
 	/* read data from register 0x8024 */
-	return libusb_control_transfer(dev->devh, CTRL_IN, 0x40, 0, 0x8024, data, 4, CTRL_TIMEOUT);
+	return (libusb_control_transfer(dev->devh, CTRL_IN, 0x40, 0, 0x8024, data, 4, CTRL_TIMEOUT));
 }
 
 int fl2k_i2c_write(fl2k_dev_t *dev, uint8_t i2c_addr, uint8_t reg_addr, uint8_t *data) {
-	int i, r, timeout = 1;
+	int i;
+	int r;
+	int timeout = 1;
 	uint32_t reg;
 
-	if (!dev)
-		return FL2K_ERROR_INVALID_PARAM;
+	if (!dev) {
+		return (FL2K_ERROR_INVALID_PARAM);
+	}
 
 	/* write data to register 0x8028 */
-	r = libusb_control_transfer(dev->devh, CTRL_OUT, 0x41,
-				    0, 0x8028, data, 4, CTRL_TIMEOUT);
+	r = libusb_control_transfer(dev->devh, CTRL_OUT, 0x41, 0, 0x8028, data, 4, CTRL_TIMEOUT);
 
-	if (r < 0)
-		return r;
+	if (r < 0) {
+		return (r);
+	}
 
 	r = fl2k_read_reg(dev, 0x8020, &reg);
-	if (r < 0)
-		return r;
+	if (r < 0) {
+		return (r);
+	}
 
 	/* apply mask, clearing bit 30 disables periodic repetition of read */
-	reg &= 0x3ffc0000;
+	reg &= 0x3FFC0000;
 
 	/* set I2C register and address */
-	reg |= (1 << 28) | (reg_addr << 8) | (i2c_addr & 0x7f);
+	reg |= ((1 << 28) | (reg_addr << 8) | (i2c_addr & 0x7F));
 
 	r = fl2k_write_reg(dev, 0x8020, reg);
-	if (r < 0)
-		return r;
+	if (r < 0) {
+		return (r);
+	}
 
 	for (i = 0; i < 10; i++) {
 		sleep_ms(10);
 
 		r = fl2k_read_reg(dev, 0x8020, &reg);
-		if (r < 0)
-			return r;
+		if (r < 0) {
+			return (r);
+		}
 
 		/* check if operation completed */
 		if (reg & (1 << 31)) {
@@ -1093,12 +1097,14 @@ int fl2k_i2c_write(fl2k_dev_t *dev, uint8_t i2c_addr, uint8_t reg_addr, uint8_t 
 		}
 	}
 
-	if (timeout)
-		return FL2K_ERROR_TIMEOUT;
+	if (timeout) {
+		return (FL2K_ERROR_TIMEOUT);
+	}
 
 	/* check if slave responded and all data was written */
-	if (reg & (0x0f << 24))
-		return FL2K_ERROR_NOT_FOUND;
+	if (reg & (0x0f << 24)) {
+		return (FL2K_ERROR_NOT_FOUND);
+	}
 
-	return FL2K_SUCCESS;
+	return (FL2K_SUCCESS);
 }

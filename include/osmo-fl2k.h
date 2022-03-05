@@ -96,13 +96,26 @@ typedef struct fl2k_dev fl2k_dev_t;
 
 
 
+/**
+ * \defgroup fl2k_device_func FL2K Device Functions
+ *
+ * @{
+ */
+
+
+
 FL2K_API uint32_t fl2k_get_device_count(void);
 
-FL2K_API const char* fl2k_get_device_name(uint32_t index);
+FL2K_API const char *fl2k_get_device_name(uint32_t index);
 
 FL2K_API int fl2k_open(fl2k_dev_t **dev, uint32_t index);
 
 FL2K_API int fl2k_close(fl2k_dev_t *dev);
+
+
+/**
+ * @}
+ */
 
 
 
@@ -154,11 +167,12 @@ typedef void(*fl2k_tx_cb_t)(fl2k_data_info_t *data_info);
  *
  * \attention This function will \b block until \ref fl2k_stop_tx() is called to cancel it!
  *
- * \param[in]	dev			the device handle given by \ref fl2k_open()
- * \param[in]	cb			the \c fl2k_tx_cb_t callback function to call
- * \param[in]	ctx			user specific context to pass via the callback function
- * \param[in]	buf_num		optional buffer count: \n
- *							\p buf_num * \c FL2K_BUF_LEN = overall buffer size set to 0 for default buffer count (4)
+ * \param[in]	dev			The device handle given by \ref fl2k_open()
+ * \param[in]	cb			The \c fl2k_tx_cb_t callback function to call
+ * \param[in]	ctx			An \e (optional) user-specific context to pass via the callback function
+ * \param[in]	buf_num		An \e optional buffer count: \n
+ *							\p buf_num * \c FL2K_BUF_LEN = overall buffer size \n
+ *							Set to \b 0 for default buffer count \b (4)
  *
  * \return 0 on success
  */
@@ -172,6 +186,18 @@ FL2K_API int fl2k_start_tx(fl2k_dev_t *dev, fl2k_tx_cb_t cb, void *ctx, uint32_t
  * \return 0 on success
  */
 FL2K_API int fl2k_stop_tx(fl2k_dev_t *dev);
+
+/**
+ * @}
+ */
+
+
+/**
+ * \defgroup fl2k_i2c_func FL2K I2C Functions
+ *
+ * @{
+ */
+
 
 /**
  * \brief Read 4 bytes via the FL2K I2C bus

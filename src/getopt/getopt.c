@@ -23,19 +23,18 @@
 /* This tells Alpha OSF/1 not to define a getopt prototype in <stdio.h>.
    Ditto for AIX 3.2 and <stdlib.h>.  */
 #ifndef _NO_PROTO
-# define _NO_PROTO
+#define _NO_PROTO
 #endif
 
 #ifdef HAVE_CONFIG_H
-# include <config.h>
+#include <config.h>
 #endif
 
-#if !defined __STDC__ || !__STDC__
-/* This is a separate conditional since some stdc systems
-   reject `defined (const)'.  */
-# ifndef const
-#  define const
-# endif
+#if (!defined(__STDC__) || !(__STDC__))
+/* This is a separate conditional since some stdc systems reject `defined (const)'.  */
+#ifndef const
+#define const
+#endif
 #endif
 
 #include <stdio.h>
@@ -49,42 +48,40 @@
    it is simpler to just do this in the source for each such file.  */
 
 #define GETOPT_INTERFACE_VERSION 2
-#if !defined _LIBC && defined __GLIBC__ && __GLIBC__ >= 2
-# include <gnu-versions.h>
-# if _GNU_GETOPT_INTERFACE_VERSION == GETOPT_INTERFACE_VERSION
-#  define ELIDE_CODE
-# endif
+#if (!defined(_LIBC) && defined(__GLIBC__) && (__GLIBC__ >= 2))
+#include <gnu-versions.h>
+#if (_GNU_GETOPT_INTERFACE_VERSION == GETOPT_INTERFACE_VERSION)
+#define ELIDE_CODE
+#endif
 #endif
 
 #ifndef ELIDE_CODE
 
 
-/* This needs to come after some library #include
-   to get __GNU_LIBRARY__ defined.  */
-#ifdef	__GNU_LIBRARY__
-/* Don't include stdlib.h for non-GNU C libraries because some of them
-   contain conflicting prototypes for getopt.  */
-# include <stdlib.h>
-# include <unistd.h>
+/* This needs to come after some library #include to get __GNU_LIBRARY__ defined.  */
+#ifdef __GNU_LIBRARY__
+/* Don't include stdlib.h for non-GNU C libraries because some of them contain conflicting prototypes for getopt.  */
+#include <stdlib.h>
+#include <unistd.h>
 #endif	/* GNU C library.  */
 
 #ifdef VMS
-# include <unixlib.h>
-# if HAVE_STRING_H - 0
-#  include <string.h>
-# endif
+#include <unixlib.h>
+#if HAVE_STRING_H - 0
+#include <string.h>
+#endif
 #endif
 
 #ifndef _
 /* This is for other GNU distributions with internationalized messages.  */
-# if (HAVE_LIBINTL_H && ENABLE_NLS) || defined _LIBC
-#  include <libintl.h>
-#  ifndef _
-#   define _(msgid)	gettext (msgid)
-#  endif
-# else
-#  define _(msgid)	(msgid)
-# endif
+#if (HAVE_LIBINTL_H && ENABLE_NLS) || defined _LIBC
+#include <libintl.h>
+#ifndef _
+#define _(msgid)	gettext (msgid)
+#endif
+#else
+#define _(msgid)	(msgid)
+#endif
 #endif
 
 /* This version of `getopt' appears to the caller like standard Unix `getopt'
